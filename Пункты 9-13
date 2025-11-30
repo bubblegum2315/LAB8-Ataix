@@ -1,0 +1,134 @@
+import json
+import requests
+
+
+BASE_URL = "https://api.ataix.kz"
+
+API_KEY = "aFCiB1x33PeQa8uFZFD71KkbwIm6MW8aRlDhWEZFDIsulVd1V77iHVX9KZyAXSEdaQ2xKT6LWCGwKtj9etTmZ2"
+
+SYMBOL_PAIR = "IMX/USDT"
+
+BUY_ORDERS_FILE = "orders.json"
+
+SELL_ORDERS_FILE = "sell_orders.json"
+
+
+def build_headers() -> dict:
+
+    return {
+        "Content-Type": "application/json",
+        "X-API-KEY": API_KEY,
+    }
+
+
+
+def create_limit_sell(symbol_pair: str, price: float, quantity: float) -> dict | None:
+
+    url = f"{BASE_URL}/api/orders"
+
+    body = {
+        "symbol": symbol_pair,
+        "side": "sell",      # для продажи
+        "type": "limit",
+        "quantity": quantity,
+        "price": price
+    }
+
+    print("Тело запроса на создание SELL-ордера:")
+    print(json.dumps(body, ensure_ascii=False, indent=2))
+
+    resp = requests.post(url, headers=build_headers(), json=body, timeout=10)
+
+    print("Ответ API при создании SELL-ордера (сырым текстом):")
+    print(resp.status_code, resp.text)
+
+    try:
+        data = resp.json()
+    except Exception:
+        print("Не удалось разобрать JSON-ответ")
+        print("-" * 50)
+        return None
+
+    print("Разобранный JSON-ответ:")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+    if data.get("status") is True:
+        result = data.get("result", {})
+        order_info = {
+            "orderID": result.get("orderID"),
+            "status": result.get("status"),
+            "symbol": result.get("symbol"),
+            "price": float(result.get("price", 0)),
+            "quantity": float(result.get("quantity", 0)),
+            "side": result.get("side"),
+            "type": result.get("type"),
+            "created": result.get("created"),
+        }
+
+        print(f"ID SELL-ордера: {order_info['orderID']}")
+        print(f"Статус SELL-ордера: {order_info['status']}")
+        print("-" * 50)
+
+        return order_info
+    else:
+        print("SELL-ордер НЕ создан.")
+        print(f"Код ошибки: {data.get('code')}")
+        print(f"Сообщение: {data.get('message')}")
+        print("-" * 50)
+        return None
+
+
+
+def create_sell_orders_for_filled_buys() -> None:
+
+    with open(BUY_ORDERS_FILE, "r", encoding="utf-8") as f:
+        buy_entries = json.load(f)
+
+    sell_entries = []
+
+    for entry in buy_entries:
+        # предполагаем структуру:
+        # {
+        #   "number": 1,
+        #   "target": "-2%",
+        #   "request_price": ...,
+        #   "order": { ... buy_order ... }
+        # }
+        buy_order = entry.get("order")
+        if not buy_order:
+            continue
+
+        if buy_order.get("status") != "filled":
+            continue
+
+        buy_id = buy_order.get("orderID")
+        buy_price = float(buy_order.get("price", 0))
+        buy_qty = float(buy_order.get("quantity", 0))
+
+        # Цена продажи на 2% дороже
+        sell_price = round(0.315, 5)
+
+        print(f"\n=== Создаём SELL для BUY-ордера {buy_id} ===")
+        print(f"Цена покупки: {buy_price}")
+        print(f"Количество:  {buy_qty}")
+        print(f"Цена продажи (+2%): {sell_price}")
+
+        sell_info = create_limit_sell(SYMBOL_PAIR, sell_price, buy_qty)
+
+        sell_entries.append({
+            "parent_buy_orderID": buy_id,   # связь с ордером покупки
+            "buy_price": buy_price,
+            "sell_price": sell_price,
+            "quantity": buy_qty,
+            "sell_order": sell_info
+        })
+
+
+    with open(SELL_ORDERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(sell_entries, f, ensure_ascii=False, indent=2)
+
+    print(f'\nФайл "{SELL_ORDERS_FILE}" сохранён.')
+
+
+if __name__ == "__main__":
+    create_sell_orders_for_filled_buys()
