@@ -1,0 +1,198 @@
+import json
+import requests
+
+BASE_URL = "https://api.ataix.kz"
+API_KEY = "aFCiB1x33PeQa8uFZFD71KkbwIm6MW8aRlDhWEZFDIsulVd1V77iHVX9KZyAXSEdaQ2xKT6LWCGwKtj9etTmZ2"
+SYMBOL_PAIR = "IMX/USDT"   
+BALANCE_CURRENCY = "USDT"  
+
+ORDER_QUANTITY = 1.0       
+ORDERS_FILE = "orders.json"
+SELL_ORDERS_FILE = "sell_orders.json"
+
+
+def build_headers() -> dict:
+    return {
+        "Content-Type": "application/json",
+        "X-API-KEY": API_KEY,
+    }
+
+
+
+def step2_get_symbol(symbol_pair: str) -> dict | None:
+    """
+    П.2: Проверка и получение информации по торговой паре SYMBOL_PAIR из /api/symbols.
+    """
+    url = f"{BASE_URL}/api/symbols"
+    resp = requests.get(url, headers=build_headers(), timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    for m in data.get("result", []):
+        if m.get("symbol") == symbol_pair:
+            print(f"[П.2] Найдена торговая пара: {symbol_pair}")
+            print(json.dumps(m, ensure_ascii=False, indent=2))
+            return m
+
+    print(f"[П.2] Торговая пара {symbol_pair} не найдена.")
+    return None
+
+
+
+def step3_get_balance(currency: str) -> float:
+    """
+    П.3: Получить доступный баланс (available) по валюте USDT.
+    Эндпоинт: /api/user/balances/{currency}
+    """
+    url = f"{BASE_URL}/api/user/balances/{currency}"
+    resp = requests.get(url, headers=build_headers(), timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Структура зависит от API, предполагаем поля available / balance
+    available = float(data.get("available", 0) or data.get("balance", 0))
+    print(f"[П.3] Доступный баланс {currency}: {available}")
+    return available
+
+
+
+def step4_get_best_bid(symbol_pair: str) -> float:
+  
+    url = f"{BASE_URL}/api/symbols"
+    resp = requests.get(url, headers=build_headers(), timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    for m in data.get("result", []):
+        if m.get("symbol") == symbol_pair:
+            bid_str = m.get("bid", "0")
+            best_bid = float(bid_str)
+            print(f"[П.4] Лучшая цена bid для {symbol_pair}: {best_bid}")
+            return best_bid
+
+    raise RuntimeError(f"[П.4] Пара {symbol_pair} не найдена в /api/symbols")
+
+
+
+def create_limit_order(symbol_pair: str, side: str, price: float, quantity: float) -> dict | None:
+  
+    url = f"{BASE_URL}/api/orders"
+
+    body = {
+        "symbol": symbol_pair,
+        "side": side,          # 'buy' или 'sell'
+        "type": "limit",
+        "quantity": quantity,
+        "price": price
+    }
+
+    print(f"=== Создание {side.upper()} ордера ===")
+    print("Тело запроса:")
+    print(json.dumps(body, ensure_ascii=False, indent=2))
+
+    resp = requests.post(url, headers=build_headers(), json=body, timeout=10)
+    print("Ответ API (сырым текстом):")
+    print(resp.status_code, resp.text)
+
+    try:
+        data = resp.json()
+    except Exception:
+        print("Не удалось разобрать JSON-ответ")
+        print("-" * 50)
+        return None
+
+    print("Разобранный JSON-ответ:")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+    if data.get("status") is True:
+        result = data.get("result", {})
+        order_info = {
+            "orderID": result.get("orderID"),
+            "status": result.get("status"),
+            "symbol": result.get("symbol"),
+            "price": float(result.get("price", 0)),
+            "quantity": float(result.get("quantity", 0)),
+            "side": result.get("side"),
+            "type": result.get("type"),
+            "created": result.get("created"),
+        }
+        print(f"ID ордера: {order_info['orderID']}")
+        print(f"Статус ордера: {order_info['status']}")
+        print("-" * 50)
+        return order_info
+    else:
+        print(f"{side.upper()} ордер не создан.")
+        print(f"Код ошибки: {data.get('code')}")
+        print(f"Сообщение: {data.get('message')}")
+        print("-" * 50)
+        return None
+
+
+def step5_7_create_buy_orders(best_bid: float) -> list:
+   
+    entries = []
+
+    # П.5: −2%
+    price1 = round(0.29, 5)
+    print(f"[П.5] Цена 1-го ордера (−2% от bid): {price1}")
+    info1 = create_limit_order(SYMBOL_PAIR, "buy", price1, ORDER_QUANTITY)
+    entries.append({
+        "number": 1,
+        "target": "-2%",
+        "request_price": price1,
+        "order": info1
+    })
+
+    # П.6: −5%
+    price2 = round(0.28, 5)
+    print(f"[П.6] Цена 2-го ордера (−5% от bid): {price2}")
+    info2 = create_limit_order(SYMBOL_PAIR, "buy", price2, ORDER_QUANTITY)
+    entries.append({
+        "number": 2,
+        "target": "-5%",
+        "request_price": price2,
+        "order": info2
+    })
+
+    # П.7: −8%
+    price3 = round(0.285, 5)
+    print(f"[П.7] Цена 3-го ордера (−8% от bid): {price3}")
+    info3 = create_limit_order(SYMBOL_PAIR, "buy", price3, ORDER_QUANTITY)
+    entries.append({
+        "number": 3,
+        "target": "-8%",
+        "request_price": price3,
+        "order": info3
+    })
+
+    return entries
+
+
+
+def save_orders_to_file(orders: list, file_path: str) -> None:
+    """
+    П.8: Сохранение списка ордеров в JSON-файл.
+    """
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(orders, f, ensure_ascii=False, indent=2)
+    print(f"[П.8] Файл '{file_path}' сохранен.")
+
+
+
+def main():
+  
+    step2_get_symbol(SYMBOL_PAIR)
+
+    step3_get_balance(BALANCE_CURRENCY)
+
+
+    best_bid = step4_get_best_bid(SYMBOL_PAIR)
+
+
+    buy_entries = step5_7_create_buy_orders(best_bid)
+
+    save_orders_to_file(buy_entries, ORDERS_FILE)
+
+
+if __name__ == "__main__":
+    main()
