@@ -1,0 +1,47 @@
+[
+  {
+    "number": 1,
+    "target": "-2%",
+    "request_price": 0.29,
+    "order": {
+      "orderID": "IMX-USDT-462206-1764527277783",
+      "status": "new",
+      "symbol": "IMX/USDT",
+      "price": 0.29,
+      "quantity": 1.0,
+      "side": "buy",
+      "type": "limit",
+      "created": "2025-11-30T18:27:57.783Z"
+    }
+  },
+  {
+    "number": 2,
+    "target": "-5%",
+    "request_price": 0.28,
+    "order": {
+      "orderID": "IMX-USDT-462207-1764527278051",
+      "status": "new",
+      "symbol": "IMX/USDT",
+      "price": 0.28,
+      "quantity": 1.0,
+      "side": "buy",
+      "type": "limit",
+      "created": "2025-11-30T18:27:58.051Z"
+    }
+  },
+  {
+    "number": 3,
+    "target": "-8%",
+    "request_price": 0.285,
+    "order": {
+      "orderID": "IMX-USDT-462208-1764527278324",
+      "status": "filled",
+      "symbol": "IMX/USDT",
+      "price": 0.285,
+      "quantity": 1.0,
+      "side": "buy",
+      "type": "limit",
+      "created": "2025-11-30T18:27:58.324Z"
+    }
+  }
+]
